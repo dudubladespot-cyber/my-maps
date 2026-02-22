@@ -1,0 +1,54 @@
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart")
+
+-- Tabela com os IDs que você forneceu
+local MAP_ASSET_IDS = {
+    82061918248474, 
+    8980677640
+}
+
+local ALTURA_INICIAL = 15000 -- Altura inicial de espera
+
+-- Fixar o jogador para evitar queda
+root.Anchored = true
+root.CFrame = CFrame.new(root.Position.X, ALTURA_INICIAL, root.Position.Z)
+
+local function LoadMaps()
+    for _, id in ipairs(MAP_ASSET_IDS) do
+        print("Tentando carregar ID: " .. id)
+        
+        -- Tenta carregar o objeto do ID atual
+        local success, objs = pcall(function() 
+            return game:GetObjects("rbxassetid://" .. id) 
+        end)
+
+        if success and objs and objs[1] then
+            local map = objs[1]
+            map.Parent = workspace
+            print("ID " .. id .. " carregado com sucesso!")
+            
+            -- Pequena espera entre carregamentos para evitar lag
+            task.wait(0.5) 
+        else
+            warn("Falha ao carregar o ID: " .. id .. ". Verifique se o ID está correto ou se o item é público.")
+        end
+    end
+
+    -- Após carregar tudo, tenta encontrar um ponto de referência para posicionar
+    task.wait(1)
+    local targetPart = workspace:FindFirstChildWhichIsA("BasePart", true)
+    
+    if targetPart then
+        root.CFrame = CFrame.new(targetPart.Position.X, 15000, targetPart.Position.Z)
+    else
+        root.CFrame = CFrame.new(0, 15000, 0)
+    end
+
+    -- Solta o jogador
+    root.Anchored = false
+    print("Todos os mapas foram processados.")
+end
+
+-- Executar o carregamento
+task.spawn(LoadMaps)
