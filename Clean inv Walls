@@ -1,46 +1,110 @@
+local function getIgnoreKeywords()
+    return {"stair", "step", "ramp", "trimp", "platform", "floor", "ground", "bridge", "road", "path", "wedge"}
+end
+
+local function isEssentialPart(name)
+    local keywords = getIgnoreKeywords()
+    name = string.lower(name)
+    for _, keyword in pairs(keywords) do
+        if name:find(keyword) then return true end
+    end
+    return false
+end
+
 local function cleanInvisWalls()
-    local count = 0
-    for _, obj in pairs(game.Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and obj.Transparency >= 0.8 and obj.CanCollide == true then
-            if not obj:FindFirstChildOfClass("TouchTransmitter") then
-                obj:Destroy()
-                count = count + 1
+    local destroyedCount = 0
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
+            local name = string.lower(obj.Name)
+            if isEssentialPart(name) then continue end
+            if name:find("water") or name:find("sea") then
+                pcall(function() obj:Destroy() destroyedCount = destroyedCount + 1 end)
+                continue
+            end
+            if obj.CanCollide == true and obj.Transparency >= 0.8 then
+                if not obj:FindFirstChildOfClass("TouchTransmitter") then
+                    pcall(function() obj:Destroy() destroyedCount = destroyedCount + 1 end)
+                end
             end
         end
     end
-    return count
+    return destroyedCount
 end
 
-local function runCleanAndFix()
-    local count = cleanInvisWalls()
-    Rayfield:Notify({Title = "Legacy Cleaner", Content = "Limpou " .. count .. " objetos.", Duration = 3})
+local function getRepairKeywords()
+    return {"stair", "step", "ramp", "trimp", "platform", "invisibleplatform", "floor", "ground", "pad", "road", "path", "bridge", "fence"}
 end
 
-local function runOverhaul()
-    local count = cleanInvisWalls()
-    Rayfield:Notify({Title = "Overhaul", Content = "Limpeza avançada concluída!", Duration = 3})
+local function isGameplayPart(name)
+    local repairKeywords = getRepairKeywords()
+    name = string.lower(name)
+    for _, keyword in pairs(repairKeywords) do
+        if name:find(keyword) then
+            return true
+        end
+    end
+    return false
 end
 
--- [[ FUNÇÕES DE LIMPEZA - COLE ISSO LOGO ACIMA DA TABMAP ]] --
-local function cleanInvisWalls()
-    local count = 0
-    for _, obj in pairs(game.Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and obj.Transparency >= 0.8 and obj.CanCollide == true then
-            if not obj:FindFirstChildOfClass("TouchTransmitter") then
-                obj:Destroy()
-                count = count + 1
+local function destroyAndStore()
+    local destroyedCount = 0
+    local storedCount = 0
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
+            local name = string.lower(obj.Name)
+            local shouldDestroy = false
+            
+            if name:find("water") or name:find("sea") then
+                shouldDestroy = true
+            elseif obj.CanCollide and obj.Transparency >= 0.8 and obj.Position.Y > 50 and not isGameplayPart(name) then
+                shouldDestroy = true
+            end
+
+            if shouldDestroy then
+                pcall(function() obj:Destroy(); destroyedCount = destroyedCount + 1 end)
+            end
+
+            if isGameplayPart(name) and obj.CanCollide == true then
+                local newPart = obj:Clone()
+                newPart.Parent = nil
+                table.insert(storedParts, newPart)
+                pcall(function() obj:Destroy() end)
+                storedCount = storedCount + 1
             end
         end
     end
-    return count
+    return storedCount, destroyedCount
+end
+
+local function restoreStoredParts()
+    local restoredCount = 0
+    local mapParent = Workspace:FindFirstChild("Map") or Workspace:FindFirstChild("Level") or Workspace
+    if not mapParent then return 0 end
+    for _, part in pairs(storedParts) do
+        pcall(function()
+            part.Parent = mapParent
+            restoredCount = restoredCount + 1
+        end)
+    end
+    storedParts = {}
+    return restoredCount
 end
 
 local function runCleanAndFix()
-    local count = cleanInvisWalls()
-    Rayfield:Notify({Title = "Legacy Cleaner", Content = "Limpou " .. count .. " objetos.", Duration = 3})
-end
-
-local function runOverhaul()
-    local count = cleanInvisWalls()
-    Rayfield:Notify({Title = "Overhaul", Content = "Limpeza avançada concluída!", Duration = 3})
+    local stored, destroyed = destroyAndStore()
+    task.wait(0.2)
+    local restored = restoreStoredParts()
+    if destroyed > 0 or restored > 0 then
+        Rayfield:Notify({
+            Title = "MAP REGENERATION",
+            Content = string.format("Ramp reset: %d. Walls destroyed: %d. Restored: %d.", stored, destroyed, restored),
+            Duration = 6
+        })
+    else
+        Rayfield:Notify({
+            Title = "CLEAN",
+            Content = "No issues found",
+            Duration = 3
+        })
+    end
 end
