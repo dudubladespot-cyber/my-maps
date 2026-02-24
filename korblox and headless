@@ -1,0 +1,30 @@
+local function applyKorblox(character)
+    local rightLeg = character:WaitForChild("Right Leg", 10) or character:FindFirstChild("RightUpperLeg")
+    if not rightLeg then return end
+    if State.Korblox then
+        for _, obj in pairs(rightLeg:GetChildren()) do
+            if obj:IsA("CharacterMesh") or obj:IsA("SpecialMesh") then obj:Destroy() end
+        end
+        local mesh = Instance.new("SpecialMesh")
+        mesh.Name = "KorbloxMesh"
+        mesh.MeshType = Enum.MeshType.FileMesh
+        mesh.MeshId = "rbxassetid://101851696"
+        mesh.TextureId = "rbxassetid://101851254"
+        mesh.Scale = Vector3.new(1.2, 1.2, 1.2)
+        mesh.Parent = rightLeg
+        rightLeg.BrickColor = BrickColor.new("Really black")
+    else
+        local mesh = rightLeg:FindFirstChild("KorbloxMesh")
+        if mesh then mesh:Destroy() end
+        rightLeg.Transparency = 0
+    end
+end
+
+local function applyHeadless(char)
+    local head = char:FindFirstChild("Head")
+    if head then
+        head.Transparency = State.Headless and 1 or 0
+        local decal = head:FindFirstChildOfClass("Decal")
+        if decal then decal.Transparency = State.Headless and 1 or 0 end
+    end
+end
