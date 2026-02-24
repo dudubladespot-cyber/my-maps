@@ -1,110 +1,158 @@
-local function getIgnoreKeywords()
-    return {"stair", "step", "ramp", "trimp", "platform", "floor", "ground", "bridge", "road", "path", "wedge"}
+local StarterGui = game:GetService("StarterGui")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+
+-- [ 參數設定 ] --
+local MIN_SIZE_TO_DELETE = 200    -- [尺寸門檻] 只要有一邊超過這個數字就刪
+
+-- 初始化變數
+if _G.WallMode == nil then _G.WallMode = 0 end 
+if _G.StoredWalls == nil then _G.StoredWalls = {} end
+
+-- 清除舊的自動偵測事件 (確保切換模式時不會重複執行)
+if _G.AutoDetectConnection then
+	_G.AutoDetectConnection:Disconnect()
+	_G.AutoDetectConnection = nil
 end
 
-local function isEssentialPart(name)
-    local keywords = getIgnoreKeywords()
-    name = string.lower(name)
-    for _, keyword in pairs(keywords) do
-        if name:find(keyword) then return true end
-    end
-    return false
+-- 切換模式 (0 -> 1 -> 2 -> 0)
+_G.WallMode = _G.WallMode + 1
+if _G.WallMode > 2 then _G.WallMode = 0 end
+
+-- 判斷是否為斜坡 (防止卡死)
+local function isSlope(part)
+	if part:IsA("WedgePart") or part:IsA("CornerWedgePart") then return true end
+	local rotX = math.abs(part.Orientation.X) % 90
+	local rotZ = math.abs(part.Orientation.Z) % 90
+	local threshold = 2 
+	if (rotX > threshold and rotX < (90 - threshold)) or (rotZ > threshold and rotZ < (90 - threshold)) then
+		return true 
+	end
+	return false
 end
 
-local function cleanInvisWalls()
-    local destroyedCount = 0
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
-            local name = string.lower(obj.Name)
-            if isEssentialPart(name) then continue end
-            if name:find("water") or name:find("sea") then
-                pcall(function() obj:Destroy() destroyedCount = destroyedCount + 1 end)
-                continue
-            end
-            if obj.CanCollide == true and obj.Transparency >= 0.8 then
-                if not obj:FindFirstChildOfClass("TouchTransmitter") then
-                    pcall(function() obj:Destroy() destroyedCount = destroyedCount + 1 end)
+-- ==========================================
+-- 核心檢查與刪除邏輯 (供初次掃描與持續偵測共用)
+-- ==========================================
+local function checkAndRemove(v)
+	if not v:IsA("BasePart") then return false end
+	if v.Transparency == 1 and v.CanCollide then
+		if isSlope(v) then return false end
+
+		if _G.WallMode == 1 then
+			-- 模式1: 尺寸大於等於設定值才刪
+			local maxSize = math.max(v.Size.X, v.Size.Y, v.Size.Z)
+			if maxSize >= MIN_SIZE_TO_DELETE then
+				table.insert(_G.StoredWalls, v)
+				v.CanCollide = false
+				return true
+			end
+		elseif _G.WallMode == 2 then
+			-- 模式2: 暴力全刪除
+			table.insert(_G.StoredWalls, v)
+			v.CanCollide = false
+			return true
+		end
+	end
+	return false
+end
+
+-- 啟動持續偵測的函式
+local function startAutoDetection()
+    local autoDeletedCount = 0 -- 新增計數器，紀錄自動刪除的總數
+
+    _G.AutoDetectConnection = Workspace.DescendantAdded:Connect(function(descendant)
+        -- 延遲 0.5 秒，確保新生成的物件其 Size 和 Transparency 屬性已經完全從伺服器載入
+        task.delay(0.5, function()
+            if descendant and descendant.Parent then
+                -- 如果成功刪除了新生成的牆壁
+                if checkAndRemove(descendant) then
+                    autoDeletedCount = autoDeletedCount + 1 -- 成功刪除就 +1
+
+                    -- 發送即時通知，並顯示目前自動刪除的總數
+                    pcall(function()
+                        StarterGui:SetCore("SendNotification", {
+                            Title = "Auto Detected!";
+                            Text = "Removed a hidden wall!\n(Total auto-cleared: " .. autoDeletedCount .. ")";
+                            Duration = 2; -- 通知顯示 2 秒
+                        })
+                    end)
                 end
             end
-        end
-    end
-    return destroyedCount
-end
-
-local function getRepairKeywords()
-    return {"stair", "step", "ramp", "trimp", "platform", "invisibleplatform", "floor", "ground", "pad", "road", "path", "bridge", "fence"}
-end
-
-local function isGameplayPart(name)
-    local repairKeywords = getRepairKeywords()
-    name = string.lower(name)
-    for _, keyword in pairs(repairKeywords) do
-        if name:find(keyword) then
-            return true
-        end
-    end
-    return false
-end
-
-local function destroyAndStore()
-    local destroyedCount = 0
-    local storedCount = 0
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
-            local name = string.lower(obj.Name)
-            local shouldDestroy = false
-            
-            if name:find("water") or name:find("sea") then
-                shouldDestroy = true
-            elseif obj.CanCollide and obj.Transparency >= 0.8 and obj.Position.Y > 50 and not isGameplayPart(name) then
-                shouldDestroy = true
-            end
-
-            if shouldDestroy then
-                pcall(function() obj:Destroy(); destroyedCount = destroyedCount + 1 end)
-            end
-
-            if isGameplayPart(name) and obj.CanCollide == true then
-                local newPart = obj:Clone()
-                newPart.Parent = nil
-                table.insert(storedParts, newPart)
-                pcall(function() obj:Destroy() end)
-                storedCount = storedCount + 1
-            end
-        end
-    end
-    return storedCount, destroyedCount
-end
-
-local function restoreStoredParts()
-    local restoredCount = 0
-    local mapParent = Workspace:FindFirstChild("Map") or Workspace:FindFirstChild("Level") or Workspace
-    if not mapParent then return 0 end
-    for _, part in pairs(storedParts) do
-        pcall(function()
-            part.Parent = mapParent
-            restoredCount = restoredCount + 1
         end)
-    end
-    storedParts = {}
-    return restoredCount
+    end)
 end
 
-local function runCleanAndFix()
-    local stored, destroyed = destroyAndStore()
-    task.wait(0.2)
-    local restored = restoreStoredParts()
-    if destroyed > 0 or restored > 0 then
-        Rayfield:Notify({
-            Title = "MAP REGENERATION",
-            Content = string.format("Ramp reset: %d. Walls destroyed: %d. Restored: %d.", stored, destroyed, restored),
-            Duration = 6
-        })
-    else
-        Rayfield:Notify({
-            Title = "CLEAN",
-            Content = "No issues found",
-            Duration = 3
-        })
-    end
+-- ==========================================
+-- [ 模式 0 ] : 恢復原狀 (Restored)
+-- ==========================================
+if _G.WallMode == 0 then
+	local restoreCount = 0
+	if _G.StoredWalls then
+		for _, v in pairs(_G.StoredWalls) do
+			if v and v.Parent then 
+				v.CanCollide = true 
+				restoreCount = restoreCount + 1
+			end
+		end
+	end
+	_G.StoredWalls = {} 
+	
+	StarterGui:SetCore("SendNotification", {
+		Title = "Restored";
+		Text = "Map is back to normal\n(Restored " .. restoreCount .. ")";
+		Duration = 3;
+	})
+
+-- ==========================================
+-- [ 模式 1 ] : 尺寸刪除 + 持續偵測
+-- ==========================================
+elseif _G.WallMode == 1 then
+	local deletedCount = 0
+	local checkCount = 0
+
+	-- 1. 初次掃描全圖
+	for _, v in pairs(Workspace:GetDescendants()) do
+		checkCount = checkCount + 1
+		if checkCount % 100 == 0 then task.wait() end
+		
+		if checkAndRemove(v) then
+			deletedCount = deletedCount + 1
+		end
+	end
+
+	-- 2. 啟動持續偵測
+	startAutoDetection()
+
+	StarterGui:SetCore("SendNotification", {
+		Title = "Size Delete";
+		Text = "Deleted " .. deletedCount .. " walls > " .. MIN_SIZE_TO_DELETE .. "\nMonitoring new walls...",
+		Duration = 3;
+	})
+
+-- ==========================================
+-- [ 模式 2 ] : 暴力刪除 + 持續偵測
+-- ==========================================
+elseif _G.WallMode == 2 then
+	local deletedCount = 0
+	local checkCount = 0
+	
+	-- 1. 初次掃描全圖
+	for _, v in pairs(Workspace:GetDescendants()) do
+		checkCount = checkCount + 1
+		if checkCount % 100 == 0 then task.wait() end
+		
+		if checkAndRemove(v) then
+			deletedCount = deletedCount + 1
+		end
+	end
+
+	-- 2. 啟動持續偵測
+	startAutoDetection()
+
+	StarterGui:SetCore("SendNotification", {
+		Title = "Remove ALL";
+		Text = "Cleared " .. deletedCount .. " walls.\nMonitoring new walls...",
+		Duration = 3;
+	})
 end
