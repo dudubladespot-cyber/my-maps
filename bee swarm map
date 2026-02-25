@@ -1,0 +1,55 @@
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart")
+local UIS = game:GetService("UserInputService")
+
+local ALTURA_INICIAL = 5000
+local COOLDOWN = 2
+local ASSET_ID = 5626514002
+local DESTINO_FINAL = CFrame.new(15.6611328, 4955.0, -6.8840332, 1, 0, 0, 0, 1, 0, 0, 0, 0.999999881)
+
+local function teleportarParaSeguranca()
+    if root then
+        root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        root.CFrame = DESTINO_FINAL
+    end
+end
+
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
+        teleportarParaSeguranca()
+    end
+end)
+
+root.Anchored = true
+root.CFrame = CFrame.new(root.Position.X, ALTURA_INICIAL, root.Position.Z)
+
+task.wait(COOLDOWN)
+
+local function loadBhop()
+    local success, model = pcall(function()
+        return game:GetObjects("rbxassetid://" .. ASSET_ID)[1]
+    end)
+
+    if success and model then
+        model.Parent = game.Workspace
+
+        if model:IsA("Model") then
+            if model.PrimaryPart then
+                model:SetPrimaryPartCFrame(DESTINO_FINAL * CFrame.new(0, -3, 0))
+            else
+                model:MoveTo(DESTINO_FINAL.Position - Vector3.new(0, 3, 0))
+            end
+        end
+
+        task.wait(0.5)
+
+        root.CFrame = DESTINO_FINAL
+        task.wait(0.2)
+        root.Anchored = false
+    else
+        root.Anchored = false
+    end
+end
+
+loadBhop()
