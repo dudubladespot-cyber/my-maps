@@ -1,0 +1,37 @@
+-- [[ SERVIÇOS ]] --
+local Players = game:GetService("Players")
+local LP = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- [[ CONFIGURAÇÕES ]] --
+local spamAmount = 40 -- Quantidade de vezes para spamar antes de cair
+local disconnectMessage = "AHAHHHAHAHA 2NMNN IS THE BEST"
+
+-- [[ FUNÇÃO DE SPAM ]] --
+local function SpamAndLeave()
+	-- Tenta enviar a mensagem no chat (funciona na maioria dos jogos com chat padrão)
+	for i = 1, spamAmount do
+		local sayMessage = "2NMNN hacked me"
+
+		-- Versão para o Chat Novo (TextChatService)
+		local TextChatService = game:GetService("TextChatService")
+		if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+			local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+			if channel then channel:SendAsync(sayMessage) end
+		else
+			-- Versão para o Chat Antigo (DefaultChatSystem)
+			local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+			if chatEvents then
+				chatEvents.SayMessageRequest:FireServer(sayMessage, "All")
+			end
+		end
+		task.wait(0.1) -- Pequeno delay para o spam registrar
+	end
+
+	-- [[ DESCONECTAR ]] --
+	-- O comando 'Kick' remove o jogador e exibe a mensagem na barra de erro do Roblox
+	LP:Kick(disconnectMessage)
+end
+
+-- Executa a função
+SpamAndLeave()
