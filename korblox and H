@@ -1,0 +1,104 @@
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+
+-- [[ 設定 ]]
+-- 無頭 Mesh ID (僅適用於 R6 角色)
+local HEADLESS_MESH_ID = "rbxassetid://6686307858"
+
+-- [[ 核心功能：應用外觀效果 (無頭 + 斷腳) ]]
+local function applyAppearance(char)
+    if not char then return end
+    
+    -- 1. 處理 UI 控制台 (僅針對本地玩家自己)
+    -- 當你重生時，確保你的 E5_Console 介面會重新顯示
+    local charPlayer = Players:GetPlayerFromCharacter(char)
+    if charPlayer == lp then
+        task.spawn(function()
+            local gui = lp:WaitForChild("PlayerGui", 10)
+            if gui then
+                local console = gui:WaitForChild("E5_Console", 5)
+                if console then 
+                    console.Enabled = true 
+                end
+            end
+        end)
+    end
+
+    -- 2. 外觀處理：無頭與斷腳
+    task.spawn(function()
+        -- 等待頭部加載，最長等待 10 秒
+        local head = char:WaitForChild("Head", 10)
+        if not head then return end
+        
+        task.wait(0.2) -- 稍微延長等待，確保所有裝飾品加載完畢
+
+        -- [[ A. 無頭處理 (Headless) ]]
+        -- 隱藏臉部貼圖 (Face) - 所有角色通用
+        for _, obj in ipairs(head:GetChildren()) do
+            if obj:IsA("Decal") or obj:IsA("Texture") then
+                obj.Transparency = 1
+            end
+        end
+
+        -- 判斷角色類型並執行對應的無頭邏輯
+        if head:IsA("MeshPart") then
+            -- [R15 角色]
+            -- 技術限制：MeshPart 的 MeshId 不能在遊戲中修改，只能改透明度
+            head.Transparency = 0 
+        else
+            -- [R6 角色]
+            -- R6 是普通 Part + SpecialMesh，可以修改 ID 來達成真正的無頭 Mesh
+            local mesh = head:FindFirstChildOfClass("SpecialMesh")
+            if not mesh then
+                mesh = Instance.new("SpecialMesh", head)
+            end
+            
+            if mesh then
+                mesh.MeshId = HEADLESS_MESH_ID
+                mesh.TextureId = "" -- 清空貼圖
+                mesh.Scale = Vector3.new(1, 1, 1) -- 確保大小正常
+                
+                -- 因為改了 ID，頭部本體要保持不透明才看得到 Mesh
+                head.Transparency = 1 
+                -- 你可以視需要調整顏色，例如：head.Color = Color3.fromRGB(163, 162, 165)
+            end
+        end
+
+        -- [[ B. 斷腳處理 (Korblox) ]]
+        -- 執行你原本的遠端斷腳腳本
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/bestkorblox"))()
+        end)
+    end)
+end
+
+-- [[ 角色監控系統 ]]
+local function setupPlayer(player)
+    -- 1. 如果腳本執行時角色已存在，直接套用
+    if player.Character then
+        applyAppearance(player.Character)
+    end
+    
+    -- 2. 監聽該玩家未來每一次的重生 (CharacterAdded)
+    player.CharacterAdded:Connect(function(char)
+        applyAppearance(char)
+    end)
+end
+
+-- ==========================================
+-- [[ 系統啟動流程 ]]
+-- ==========================================
+
+task.spawn(function()
+    print("//// #### [M4] GLOBAL_APPEARANCE_SYSTEM_RUNNING #### ////")
+
+    -- 1. 對當前伺服器內的所有玩家執行
+    for _, player in ipairs(Players:GetPlayers()) do
+        setupPlayer(player)
+    end
+    
+    -- 2. 監聽未來加入的玩家 (PlayerAdded)
+    Players.PlayerAdded:Connect(function(player)
+        setupPlayer(player)
+    end)
+end)
